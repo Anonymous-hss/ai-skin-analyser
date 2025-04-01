@@ -1,5 +1,8 @@
-import { type NextRequest, NextResponse } from "next/server";
-import { kv } from "@vercel/kv";
+// app/api/auth/verify-otp/route.ts
+import { NextRequest, NextResponse } from "next/server";
+import { redis, db } from "@/lib/db";
+import { users } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
 
 export async function POST(request: NextRequest) {
@@ -13,8 +16,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get stored OTP
-    const storedData = await kv.get(`otp:${phoneNumber}`);
+    // Get stored OTP from Redis
+    const storedData = await redis.get(`otp:${phoneNumber}`);
 
     if (!storedData) {
       return NextResponse.json(
@@ -23,7 +26,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { otp: storedOtp, expiresAt, verified } = storedData as any;
+    const { otp: storedOtp, expiresAt, verified } = storedData;
 
     // Check if OTP is already verified
     if (verified) {
@@ -43,36 +46,46 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid OTP" }, { status: 400 });
     }
 
-    // Mark OTP as verified
-    await kv.set(
+    // Mark OTP as verified in Redis
+    await redis.set(
       `otp:${phoneNumber}`,
       {
         ...storedData,
         verified: true,
       },
-      { ex: 600 }
+      600
     ); // Keep for 10 more minutes
 
-    // Create user if not exists
-    const userId = uuidv4();
-    const user = {
-      id: userId,
-      name,
-      phoneNumber,
-      hasUsedService: false,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+    // Check if user exists in PostgreSQL
+    const existingUsers = await db
+      .select()
+      .from(users)
+      .where(eq(users.phoneNumber, phoneNumber))
+      .limit(1);
 
-    await kv.set(`user:${phoneNumber}`, user);
+    let userId;
+
+    if (existingUsers.length === 0) {
+      // Create new user in PostgreSQL
+      const [newUser] = await db
+        .insert(users)
+        .values({
+          name,
+          phoneNumber,
+          hasUsedService: false,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .returning({ id: users.id });
+
+      userId = newUser.id;
+    } else {
+      userId = existingUsers[0].id;
+    }
 
     // Generate session token
     const sessionToken = uuidv4();
-    await kv.set(
-      `session:${sessionToken}`,
-      { userId, phoneNumber },
-      { ex: 86400 }
-    ); // 24 hours expiration
+    await redis.set(`session:${sessionToken}`, { userId, phoneNumber }, 86400); // 24 hours expiration
 
     return NextResponse.json({
       message: "OTP verified successfully",

@@ -1,195 +1,141 @@
-"use client"
+// components/ImageCapture.tsx
+"use client";
 
-import type React from "react"
-
-import { useState, useRef, useCallback } from "react"
-import Webcam from "react-webcam"
+import { useState, useRef } from "react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Upload, Camera } from "lucide-react";
+import FaceDetectionCamera from "./FaceDetectionCamera";
 
 interface ImageCaptureProps {
-  onCapture: (imageDataUrl: string) => void
-  capturedImage: string | null
+  onCapture: (imageDataUrl: string) => void;
+  capturedImage: string | null;
 }
 
-export default function ImageCapture({ onCapture, capturedImage }: ImageCaptureProps) {
-  const [isCameraActive, setIsCameraActive] = useState(false)
-  const [isCameraReady, setIsCameraReady] = useState(false)
-  const [uploadedImage, setUploadedImage] = useState<string | null>(null)
-  const webcamRef = useRef<Webcam>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
-
-  const startCamera = () => {
-    setIsCameraActive(true)
-    setUploadedImage(null)
-  }
-
-  const handleCameraReady = () => {
-    setIsCameraReady(true)
-  }
-
-  const captureImage = useCallback(() => {
-    if (!webcamRef.current) return
-
-    const imageSrc = webcamRef.current.getScreenshot()
-    if (imageSrc) {
-      onCapture(imageSrc)
-      setIsCameraActive(false)
-    }
-  }, [webcamRef, onCapture])
+export default function ImageCapture({
+  onCapture,
+  capturedImage,
+}: ImageCaptureProps) {
+  const [uploadedImage, setUploadedImage] = useState<string | null>(null);
+  const [captureMethod, setCaptureMethod] = useState<
+    "camera" | "upload" | null
+  >(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
+    const file = event.target.files?.[0];
+    if (!file) return;
 
-    const reader = new FileReader()
+    const reader = new FileReader();
     reader.onloadend = () => {
-      const result = reader.result as string
-      setUploadedImage(result)
-      onCapture(result)
-    }
-    reader.readAsDataURL(file)
-  }
+      const result = reader.result as string;
+      setUploadedImage(result);
+      onCapture(result);
+    };
+    reader.readAsDataURL(file);
+  };
 
   const triggerFileInput = () => {
-    fileInputRef.current?.click()
-  }
+    fileInputRef.current?.click();
+  };
+
+  const handleCameraCapture = (imageDataUrl: string) => {
+    if (imageDataUrl) {
+      onCapture(imageDataUrl);
+    } else {
+      // If empty string is passed, it means reset
+      setCaptureMethod(null);
+    }
+  };
 
   return (
-    <div className="flex flex-col items-center">
-      <div className="w-full max-w-md aspect-[3/4] relative rounded-lg overflow-hidden bg-secondary-100 mb-4">
-        {isCameraActive ? (
-          <>
-            <Webcam
-              audio={false}
-              ref={webcamRef}
-              screenshotFormat="image/jpeg"
-              videoConstraints={{
-                facingMode: "user",
-                width: 720,
-                height: 960,
-              }}
-              onUserMedia={handleCameraReady}
-              className="w-full h-full object-cover"
-            />
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className="w-3/4 h-3/4 border-4 rounded-full border-dashed border-white opacity-70"></div>
+    <Card className="w-full max-w-md mx-auto">
+      <CardContent className="p-6">
+        {captureMethod === null ? (
+          <div className="space-y-6">
+            <h3 className="text-lg font-medium text-center">
+              Choose Capture Method
+            </h3>
+
+            <div className="grid grid-cols-2 gap-4">
+              <Button
+                onClick={() => setCaptureMethod("camera")}
+                className="h-32 flex flex-col items-center justify-center"
+                variant="outline"
+              >
+                <Camera className="h-8 w-8 mb-2" />
+                <span>Use Camera</span>
+              </Button>
+
+              <Button
+                onClick={() => setCaptureMethod("upload")}
+                className="h-32 flex flex-col items-center justify-center"
+                variant="outline"
+              >
+                <Upload className="h-8 w-8 mb-2" />
+                <span>Upload Image</span>
+              </Button>
             </div>
-          </>
-        ) : uploadedImage || capturedImage ? (
-          <img src={uploadedImage || capturedImage || ""} alt="Captured face" className="w-full h-full object-cover" />
-        ) : (
-          <div className="w-full h-full flex flex-col items-center justify-center p-6">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-16 w-16 text-secondary-300 mb-4"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"
-              />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-            <p className="text-secondary-500 text-center">
-              Take a photo or upload an image to begin your skin analysis
+
+            <p className="text-sm text-gray-500 text-center">
+              For best results, use a well-lit environment and position your
+              face directly in front of the camera.
             </p>
           </div>
-        )}
-      </div>
-
-      <div className="flex flex-wrap justify-center gap-4 w-full">
-        {!isCameraActive && !uploadedImage && !capturedImage && (
-          <>
-            <button onClick={startCamera} className="btn btn-primary flex items-center">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-5 w-5 mr-2"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+        ) : captureMethod === "camera" ? (
+          <FaceDetectionCamera
+            onCapture={handleCameraCapture}
+            capturedImage={capturedImage}
+          />
+        ) : (
+          <div className="space-y-4">
+            <div className="aspect-[3/4] relative rounded-lg overflow-hidden bg-gray-100">
+              {uploadedImage || capturedImage ? (
+                <img
+                  src={uploadedImage || capturedImage || ""}
+                  alt="Uploaded face"
+                  className="w-full h-full object-cover"
                 />
-              </svg>
-              Start Camera
-            </button>
+              ) : (
+                <div className="w-full h-full flex flex-col items-center justify-center">
+                  <Upload className="h-12 w-12 text-gray-400 mb-2" />
+                  <p className="text-sm text-gray-500">
+                    Click below to upload an image
+                  </p>
+                </div>
+              )}
+            </div>
 
-            <button onClick={triggerFileInput} className="btn btn-outline flex items-center">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-5 w-5 mr-2"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
+            <div className="flex justify-center">
+              <Button
+                onClick={triggerFileInput}
+                variant="outline"
+                className="flex items-center"
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
-                />
-              </svg>
-              Upload Image
-            </button>
-
-            <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept="image/*" className="hidden" />
-          </>
-        )}
-
-        {isCameraActive && (
-          <button onClick={captureImage} disabled={!isCameraReady} className="btn btn-primary flex items-center">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-5 w-5 mr-2"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"
+                <Upload className="mr-2 h-4 w-4" />
+                {uploadedImage || capturedImage
+                  ? "Choose Different Image"
+                  : "Upload Image"}
+              </Button>
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileUpload}
+                accept="image/*"
+                className="hidden"
               />
-            </svg>
-            Capture
-          </button>
-        )}
+            </div>
 
-        {(uploadedImage || capturedImage) && (
-          <button
-            onClick={() => {
-              setUploadedImage(null)
-              setIsCameraActive(false)
-            }}
-            className="btn btn-outline flex items-center"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-5 w-5 mr-2"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
+            <Button
+              onClick={() => setCaptureMethod(null)}
+              variant="link"
+              className="w-full"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-              />
-            </svg>
-            Retake
-          </button>
+              Back to Capture Methods
+            </Button>
+          </div>
         )}
-      </div>
-    </div>
-  )
+      </CardContent>
+    </Card>
+  );
 }
-
