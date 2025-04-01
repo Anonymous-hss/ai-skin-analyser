@@ -1,5 +1,8 @@
-import { type NextRequest, NextResponse } from "next/server";
-import { kv } from "@vercel/kv";
+// app/api/auth/send-otp/route.ts
+import { NextRequest, NextResponse } from "next/server";
+import { redis, db } from "@/lib/db";
+import { users } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 
 // In a production app, you would use a proper SMS service like Twilio
 // This is a mock implementation for demonstration purposes
@@ -24,8 +27,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if user has already used the service
-    const existingUser = await kv.get(`user:${phoneNumber}`);
-    if (existingUser && (existingUser as any).hasUsedService) {
+    const existingUser = await db
+      .select()
+      .from(users)
+      .where(eq(users.phoneNumber, phoneNumber))
+      .limit(1);
+
+    if (existingUser.length > 0 && existingUser[0].hasUsedService) {
       return NextResponse.json(
         {
           error:
@@ -38,16 +46,16 @@ export async function POST(request: NextRequest) {
     // Generate a 6-digit OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
-    // Store OTP with 10-minute expiration
+    // Store OTP in Redis with 10-minute expiration
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
-    await kv.set(
+    await redis.set(
       `otp:${phoneNumber}`,
       {
         otp,
         expiresAt: expiresAt.toISOString(),
         verified: false,
       },
-      { ex: 600 }
+      600
     ); // 10 minutes expiration
 
     // Send OTP via SMS

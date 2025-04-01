@@ -1,7 +1,7 @@
-// app/api/auth/mark-used/route.ts
+// app/api/store-analysis/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { redis, db } from "@/lib/db";
-import { users } from "@/lib/db/schema";
+import { users, analysisHistory } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 
 export async function POST(request: NextRequest) {
@@ -23,29 +23,46 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { phoneNumber } = session;
+    const { userId, phoneNumber } = session;
 
-    // Update user in PostgreSQL
-    const result = await db
+    // Get request data
+    const { imageUrl, analysisData } = await request.json();
+
+    if (!imageUrl || !analysisData) {
+      return NextResponse.json(
+        { error: "Image URL and analysis data are required" },
+        { status: 400 }
+      );
+    }
+
+    // Store analysis in PostgreSQL
+    const [result] = await db
+      .insert(analysisHistory)
+      .values({
+        userId,
+        imageUrl,
+        analysisData: JSON.stringify(analysisData),
+        createdAt: new Date(),
+      })
+      .returning({ id: analysisHistory.id });
+
+    // Mark user as having used the service
+    await db
       .update(users)
       .set({
         hasUsedService: true,
         updatedAt: new Date(),
       })
-      .where(eq(users.phoneNumber, phoneNumber))
-      .returning({ id: users.id });
-
-    if (result.length === 0) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
+      .where(eq(users.id, userId));
 
     return NextResponse.json({
-      message: "User marked as having used the service",
+      message: "Analysis stored successfully",
+      analysisId: result.id,
     });
   } catch (error) {
-    console.error("Error marking user as used:", error);
+    console.error("Error storing analysis:", error);
     return NextResponse.json(
-      { error: "Failed to update user" },
+      { error: "Failed to store analysis" },
       { status: 500 }
     );
   }
